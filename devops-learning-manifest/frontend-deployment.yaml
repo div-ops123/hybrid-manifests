@@ -1,0 +1,52 @@
+# Deployment for the React frontend of the DevOps Learning Platform
+apiVersion: apps/v1  # Correct API version for Deployment
+kind: Deployment
+metadata:
+  name: devops-learning-frontend  # Unique name for the frontend Deployment
+  namespace: prod  # Prod namespace for CI/CD compatibility
+spec:
+  replicas: 2  # Run 2 pods for high availability
+  selector:
+    matchLabels:
+      app: devops-learning-frontend  # Matches pod template labels
+
+  template:
+    metadata:
+      labels:
+        app: devops-learning-frontend  # Label for pod selection
+
+    spec:
+      containers:
+      - name: devops-learning-frontend  # Container name for clarity
+        image: livingdevopswithakhilesh/devopsdozo:frontend-latest  # Official frontend image
+        ports:
+        - containerPort: 80  # Nginx serves on port 80
+        env:
+        - name: REACT_APP_API_URL
+          value: "/api"  # API calls proxied to backend via Ingress
+
+        resources:
+          requests:
+            cpu: "50m"  # Minimum 50 milliCPU
+            memory: "64Mi"  # Minimum 64MiB memory
+          limits:
+            cpu: "500m"  # Max 0.5 CPU to handle spikes
+            memory: "256Mi"  # Max 256MiB memory
+
+        livenessProbe:  # Checks if the container is running
+          httpGet:
+            path: /  # Health check on root path
+            port: 80
+          initialDelaySeconds: 15  # Wait 15s before first check
+          periodSeconds: 10  # Check every 10s
+          timeoutSeconds: 3  # Timeout after 3s
+          failureThreshold: 3  # Restart after 3 failures
+
+        readinessProbe:  # Checks if the container is ready for traffic
+          httpGet:
+            path: /  # Same path as liveness probe
+            port: 80
+          initialDelaySeconds: 5  # Start checking after 5s
+          periodSeconds: 5  # Check every 5s
+          timeoutSeconds: 3  # Timeout after 3s
+          failureThreshold: 3  # Remove from service after 3 failures

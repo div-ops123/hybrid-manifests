@@ -7,6 +7,7 @@ Single repository with manifests organized as:
 - `youtube-clone-manifest/`: Manifests for the YouTube Clone app.
 - `devops-learning-manifest/`: Manifests for the 3-tier app (React frontend, Flask backend, RDS PostgreSQL).
 - All resources in the `prod` namespace to align with your Terraform RBAC setup (`prod-editors` group for CI/CD).
+- **Selector and Labels:** `app: devops-learning-frontend` is consistent across `selector.matchLabels` and `template.metadata.labels`.
 
 #### Updated Repository Structure
 Here’s how your local and GitHub repository should look:
@@ -109,10 +110,7 @@ If the variable is set, it’s runtime. If unset or the app fails to access the 
 
 #### Naming Convention
 - Follow your established best practice for `metadata.name` to ensure clarity and uniqueness:
-  - **Frontend**:
-    - `Deployment`: `devops-learning-frontend`
-    - `Service`: `devops-learning-frontend-service`
-    - `Ingress`: `devops-learning-frontend-ingress`
+  
   - **Backend**:
     - `Deployment`: `devops-learning-backend`
     - `Service`: `devops-learning-backend-service`
@@ -126,6 +124,44 @@ If the variable is set, it’s runtime. If unset or the app fails to access the 
 
 ---
 
+# DevOps Learning Platform App
+
+# Visual Flow of DevOps Learning Platform Traffic:
+
+```text
+frontend.your-domain.com
+  ↓ (DNS resolves to ALB via Route 53)
+ALB (in public subnets, port 80)
+  ↓ (host: frontend.your-domain.com, path-based routing)
+  ├── Path: /api
+  │     ↓ (targeting backend ClusterIP Service, port 8000)
+  │   Worker Nodes’ ENIs (in private subnets)
+  │     ↓ (kube-proxy routes to ClusterIP Service)
+  │   ClusterIP Service (devops-learning-backend-service, virtual IP, port 8000)
+  │     ↓ (load-balances to backend pods, targetPort 8000)
+  │   Backend Pods (on worker nodes, container port 8000, Flask)
+  │     ↓ (queries RDS via External Service)
+  │   External Service (devops-learning-postgres, ExternalName to RDS endpoint)
+  │     ↓ (VPC private network)
+  │   RDS PostgreSQL (in private subnets, port 5432)
+  │     ↑ (returns query results)
+  │   Backend Pods
+  │     ↑ (returns API response)
+  │   ClusterIP Service -> Worker Nodes -> ALB
+  ↓
+  └── Path: /
+        ↓ (targeting frontend ClusterIP Service, port 80)
+      Worker Nodes’ ENIs (in private subnets)
+        ↓ (kube-proxy routes to ClusterIP Service)
+      ClusterIP Service (devops-learning-frontend-service, virtual IP, port 80)
+        ↓ (load-balances to frontend pods, targetPort 80)
+      Frontend Pods (on worker nodes, container port 80, Nginx)
+        ↑ (serves React app)
+      ClusterIP Service -> Worker Nodes -> ALB
+  ↑ (returns HTML/JS or API data to browser)
+User’s Browser
+```
+
 ### Features and Kubernetes Objects to Include
 
 3-tier application consists of:
@@ -134,35 +170,30 @@ If the variable is set, it’s runtime. If unset or the app fails to access the 
 - **RDS PostgreSQL**: Managed database in the same VPC as the EKS cluster, deployed in private subnets.
 
 
+Port-forward for local testing:
+`kubectl port-forward svc/devops-learning-frontend-service 3000:80 -n prod`
+
 ### Features for React Frontend
 1. **Deployment for React Frontend**:
    - **Object**: `Deployment`
    - **Purpose**: Manages stateless React frontend pods, serving the UI via Nginx.
-   - **Best Practices**:
-     - Set `replicas: 2` for high availability.
-     - Use `livenessProbe` and `readinessProbe` (HTTP GET on `/`, port 80).
-     - Define resource `requests` and `limits` (e.g., CPU: 100m/500m, Memory: 128Mi/512Mi).
-     - Use image: `livingdevopswithakhilesh/devopsdozo:frontend-latest`.
+
      - Set environment variable `REACT_APP_API_URL` to point to the Flask backend service (e.g., `http://devops-learning-backend-service.prod.svc.cluster.local:8000/api`).
 
 2. **Service for React Frontend**:
    - **Object**: `Service`
    - **Purpose**: Exposes the frontend internally on port 80 for the ALB Ingress.
-   - **Best Practices**:
-     - Use `ClusterIP` type.
-     - Map service port 80 to container port 80 (Nginx).
-     - Use selector `app: devops-learning-frontend`.
+   - **The frontend** needs a stable API URL that resolves to the backend, either via Kubernetes DNS (internal) or ALB proxying (external).
 
 3. **Ingress for React Frontend**:
    - **Object**: `Ingress`
-   - **Purpose**: Routes external traffic (e.g., `frontend.your-domain.com`) to the frontend service via AWS ALB.
+   - **Purpose**: Routes external traffic to the frontend service via AWS ALB.
    - **Best Practices**:
      - Use ALB annotations (e.g., `kubernetes.io/ingress.class: alb`, `alb.ingress.kubernetes.io/scheme: internet-facing`).
      - Set health check path to `/`.
      - Integrate with Route 53 by setting `host: frontend.your-domain.com`.
      - Optionally enable HTTPS with AWS Certificate Manager (ACM).
 
-React frontend for DevOps Learning Platform     
 
 #### Features for Flask Backend
 4. **Deployment for Flask Backend**:

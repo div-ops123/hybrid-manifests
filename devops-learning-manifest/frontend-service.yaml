@@ -1,0 +1,14 @@
+# Service for the React frontend, exposing it internally
+apiVersion: v1
+kind: Service
+metadata:
+  name: devops-learning-frontend-service  # Unique name for the frontend Service
+  namespace: prod  # Prod namespace for CI/CD
+spec:
+  selector:
+    app: devops-learning-frontend  # Matches frontend Deployment pods
+  ports:
+  - name: http  # Named port for clarity and tools like Prometheus that scrape metrics by port name.
+    port: 80  # Service port for ALB Ingress
+    targetPort: 80  # Container port (Nginx)
+  type: ClusterIP  # Internal load balancing  

@@ -10,7 +10,7 @@ metadata:
     
     # --- IngressGroup ---
     # Enables you to group multiple Ingress resources under 1 ALB
-    alb.ingress.kubernetes.io/group.name: my-first-cluster.youtube-app-group # <cluster name>.<groupname>
+    alb.ingress.kubernetes.io/group.name: my-first-cluster.alb-group  # Share ALB with DevOps Learning app
 
     # --- Access control for LoadBalancer ---
     # whether your load balancer would be internet-facing or internal
@@ -22,9 +22,7 @@ metadata:
 
     # --- Traffic Listening ---
     # specifies the ports that ALB listens on
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}'
-    # every HTTP listener will be configured with a default action which redirects to HTTPS
-    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'  # HTTP only
 
     # --- Health Check ---
     # specifies the HTTP path when performing health check on targets
