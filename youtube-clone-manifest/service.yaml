@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: youtube-app-service
+  namespace: prod
+spec:
+  # Associate this service with pods having this label
+  selector:
+    app: youtube-app
+  # Maps service port 80 to container port 80
+  ports:
+  - port: 80        # Service port
+    targetPort: 80  # Container port
+  type: ClusterIP

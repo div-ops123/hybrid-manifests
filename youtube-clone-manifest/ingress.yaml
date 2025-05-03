@@ -1,0 +1,58 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: youtube-app-ingress
+  namespace: prod
+  # How you want your ALB to behave
+  annotations:
+    # Specifies the AWS Load Balancer Controller to handle this Ingress
+    kubernetes.io/ingress.class: alb
+    
+    # --- IngressGroup ---
+    # Enables you to group multiple Ingress resources under 1 ALB
+    alb.ingress.kubernetes.io/group.name: my-first-cluster.youtube-app-group # <cluster name>.<groupname>
+
+    # --- Access control for LoadBalancer ---
+    # whether your load balancer would be internet-facing or internal
+    alb.ingress.kubernetes.io/scheme: internet-facing
+
+    # --- Traffic Routing ---
+    # specifies how to route traffic to pods
+    alb.ingress.kubernetes.io/target-type: ip     # ip mode will route traffic directly to the pod IP
+
+    # --- Traffic Listening ---
+    # specifies the ports that ALB listens on
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}'
+    # every HTTP listener will be configured with a default action which redirects to HTTPS
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+
+    # --- Health Check ---
+    # specifies the HTTP path when performing health check on targets
+    # specifies the endpoint on your application that the ALB queries to determine if a pod is healthy. The ALB sends HTTP requests to this path (e.g., GET /ping or GET /health) on each pod’s target port
+    # Check your application’s code to confirm which endpoint it exposes
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    # specifies the interval between health check of an individual target
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '15'
+    # specifies the timeout during which no response from a target means a failed health check
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
+    # specifies the consecutive health checks successes required before considering an unhealthy target healthy
+    alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+    # specifies the consecutive health check failures required before considering a target unhealthy
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
+
+    # --- Resource Tags ---
+    # specifies additional tags that will be applied to AWS resources(ALB/TargetGroups/SecurityGroups/Listener/ListenerRule) it created
+    alb.ingress.kubernetes.io/tags: Environment=prod,Project=youtube-app
+
+spec:
+  rules:
+  - hosts: www.youtube-app.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: youtube-app
+            port:
+              number: 80
