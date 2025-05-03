@@ -1,29 +1,36 @@
 # YouTube Clone Application and Spring PetClinic Sample Application Kubernetes Manifest
 
-# Repository Structure
 
-```text
-~/eks-cluster-manifests/
+### 1. Confirming Repository Structure
+
+Single repository with manifests organized as:
+- `youtube-clone-manifest/`: Manifests for the YouTube Clone app.
+- `devops-learning-manifest/`: Manifests for the 3-tier app (React frontend, Flask backend, RDS PostgreSQL).
+- All resources in the `prod` namespace to align with your Terraform RBAC setup (`prod-editors` group for CI/CD).
+
+#### Updated Repository Structure
+Here’s how your local and GitHub repository should look:
+
+```bash
+~/my-first-cluster-manifests/
 ├── youtube-clone-manifest/
-│   ├── deployment.yaml       # YouTube Clone Deployment
-│   ├── service.yaml          # YouTube Clone Service
-│   ├── ingress.yaml          # YouTube Clone Ingress
-├── java-mysql-manifest/
-│   ├── java-deployment.yaml  # Java App Deployment
-│   ├── java-service.yaml     # Java App Service
-│   ├── java-ingress.yaml     # Java App Ingress
-│   ├── mysql-statefulset.yaml # MySQL StatefulSet
-│   ├── mysql-service.yaml    # MySQL Service
-│   ├── mysql-configmap.yaml  # MySQL Configuration
-│   ├── mysql-pvc.yaml        # PersistentVolumeClaim for MySQL
-│   ├── mysql-cronjob.yaml    # MySQL Backup CronJob
+│   ├── deployment.yaml           # YouTube Clone Deployment
+│   ├── service.yaml              # YouTube Clone Service
+│   ├── ingress.yaml              # YouTube Clone Ingress
+├── devops-learning-manifest/
+│   ├── frontend-deployment.yaml  # React Frontend Deployment
+│   ├── frontend-service.yaml     # React Frontend Service
+│   ├── frontend-ingress.yaml     # React Frontend Ingress
+│   ├── backend-deployment.yaml   # Flask Backend Deployment
+│   ├── backend-service.yaml      # Flask Backend Service
+│   ├── backend-ingress.yaml      # Flask Backend Ingress
+│   ├── backend-job.yaml          # Database Migration Job
+│   ├── external-service.yaml     # External Service for RDS PostgreSQL
+│   ├── configmap.yaml            # Configuration for Flask Backend
+│   ├── secret.yaml               # Secrets for RDS credentials (from AWS Parameter Store)
 ```
 
-**NOTES:**
-- Keep Both Apps in prod Namespace
-- Use distinct metadata.name and labels to differentiate apps
-- Keeps all manifests in one repo for ArgoCD to manage.
-- Simplifies Jenkins pipeline updates (single repo for image tag changes).
+---
 
 # YouTube Clone Applicaton
 
@@ -100,149 +107,306 @@ If the variable is set, it’s runtime. If unset or the app fails to access the 
 
 ---
 
-# Spring PetClinic Sample Application
-
-# Features for Java App
-
-1. Deployment for Java App:
-Object: Deployment
-Purpose: Manages stateless Java app pods (e.g., Spring Boot, Tomcat) with replicas for high availability.
-Best Practices:
-Set replicas: 2 for redundancy.
-Use livenessProbe and readinessProbe (HTTP or TCP, depending on the app’s endpoint).
-Define resource requests and limits for CPU/memory.
-Inject sensitive data (e.g., database credentials) via AWS Parameter Store.
-
-2. Service for Java App:
-Object: Service
-Purpose: Exposes the Java app internally (port 8080, typical for Java web apps) to MySQL and external traffic.
-Best Practices:
-Use ClusterIP for internal load balancing.
-Map service port to container port (e.g., 8080).
-
-3. Ingress for Java App:
-Object: Ingress
-Purpose: Routes external traffic (e.g., java-app.your-domain.com) to the Java app via the AWS ALB (using AWS Load Balancer Controller).
-Best Practices:
-Add ALB annotations (e.g., kubernetes.io/ingress.class: alb).
-Use health check paths (e.g., /health).
-Optionally enable HTTPS with AWS Certificate Manager.
-AWS Parameter Store Integration:
-Object: Secret (or external secrets operator, but we’ll use Secret for simplicity)
-Purpose: Stores sensitive data (e.g., database credentials, API keys) securely.
-Best Practices:
-Use AWS Systems Manager (SSM) Parameter Store to store secrets.
-Integrate with Kubernetes via Secret populated by a sidecar or manual sync (e.g., AWS CLI in Jenkins).
-Example: Store MySQL username/password in /java-app/mysql-credentials.
+#### Naming Convention
+- Follow your established best practice for `metadata.name` to ensure clarity and uniqueness:
+  - **Frontend**:
+    - `Deployment`: `devops-learning-frontend`
+    - `Service`: `devops-learning-frontend-service`
+    - `Ingress`: `devops-learning-frontend-ingress`
+  - **Backend**:
+    - `Deployment`: `devops-learning-backend`
+    - `Service`: `devops-learning-backend-service`
+    - `Ingress`: `devops-learning-backend-ingress`
+    - `Job`: `devops-learning-backend-migration`
+  - **RDS PostgreSQL**:
+    - `External Service`: `devops-learning-postgres`
+    - `ConfigMap`: `devops-learning-config`
+    - `Secret`: `devops-learning-secrets`
+- Use consistent `labels` for selectors (e.g., `app: devops-learning-frontend`, `app: devops-learning-backend`).
 
 ---
 
-# Features for MySQL
+### Features and Kubernetes Objects to Include
 
-1. **StatefulSet for MySQL:**
-  Object: StatefulSet
-  Purpose: Manages MySQL pods, ensuring stable network identities and persistent storage for the database.
-  Best Practices:
-  * Use a single replica for simplicity (or a leader-follower setup for HA).
-  * Define livenessProbe and readinessProbe (TCP port 3306).
-  * Set resource requests and limits.
+3-tier application consists of:
+- **React Frontend**: Served via Nginx, using the image `livingdevopswithakhilesh/devopsdozo:frontend-latest`.
+- **Flask Backend**: REST API, using the image `livingdevopswithakhilesh/devopsdozo:backend-latest`.
+- **RDS PostgreSQL**: Managed database in the same VPC as the EKS cluster, deployed in private subnets.
 
-2. **Service for MySQL:**
-Object: Service
-Purpose: Exposes MySQL internally (port 3306) for the Java app to connect.
-Best Practices:
-Store MySQL credentials in SSM:
-Plan to sync these to a Kubernetes Secret (via a tool).
-Use ClusterIP with a headless service for StatefulSet (if needed for DNS).
-Ensure the Java app connects via the service name (e.g., mysql.java-app.svc.cluster.local:3306).
 
-3. PersistentVolumeClaim (PVC) for MySQL:
-Object: PersistentVolumeClaim
-Purpose: Provides persistent storage for MySQL data, backed by AWS EBS (via EKS storage class).
-Best Practices:
-Use storageClassName: gp2 (AWS EBS default).
-Request sufficient storage (e.g., 10Gi).
-Mount at /var/lib/mysql.
+### Features for React Frontend
+1. **Deployment for React Frontend**:
+   - **Object**: `Deployment`
+   - **Purpose**: Manages stateless React frontend pods, serving the UI via Nginx.
+   - **Best Practices**:
+     - Set `replicas: 2` for high availability.
+     - Use `livenessProbe` and `readinessProbe` (HTTP GET on `/`, port 80).
+     - Define resource `requests` and `limits` (e.g., CPU: 100m/500m, Memory: 128Mi/512Mi).
+     - Use image: `livingdevopswithakhilesh/devopsdozo:frontend-latest`.
+     - Set environment variable `REACT_APP_API_URL` to point to the Flask backend service (e.g., `http://devops-learning-backend-service.prod.svc.cluster.local:8000/api`).
 
-4. ConfigMap for MySQL Configuration:
-Object: ConfigMap
-Purpose: Stores MySQL configuration (e.g., my.cnf) for tuning (e.g., buffer pool size, max connections).
-Best Practices:
-Mount as a volume in the MySQL container.
-Keep configurations minimal for learning.
+2. **Service for React Frontend**:
+   - **Object**: `Service`
+   - **Purpose**: Exposes the frontend internally on port 80 for the ALB Ingress.
+   - **Best Practices**:
+     - Use `ClusterIP` type.
+     - Map service port 80 to container port 80 (Nginx).
+     - Use selector `app: devops-learning-frontend`.
 
-Secret for MySQL Credentials:
-Object: Secret
-Purpose: Stores MySQL root password and user credentials (synced from AWS Parameter Store).
-Best Practices:
-Use environment variables or mounted files for credentials.
-Avoid hardcoding in manifests.
+3. **Ingress for React Frontend**:
+   - **Object**: `Ingress`
+   - **Purpose**: Routes external traffic (e.g., `frontend.your-domain.com`) to the frontend service via AWS ALB.
+   - **Best Practices**:
+     - Use ALB annotations (e.g., `kubernetes.io/ingress.class: alb`, `alb.ingress.kubernetes.io/scheme: internet-facing`).
+     - Set health check path to `/`.
+     - Integrate with Route 53 by setting `host: frontend.your-domain.com`.
+     - Optionally enable HTTPS with AWS Certificate Manager (ACM).
 
-CronJob for MySQL Backups:
-Object: CronJob
-Purpose: Schedules periodic backups of MySQL data to AWS S3.
-Best Practices:
-Use a backup tool like mysqldump or xtrabackup in a sidecar container.
-Store backups in an S3 bucket (e.g., s3://java-app-backups/).
-S3 Backups: Ensure the S3 bucket for MySQL backups is created, via Terraform.
-Secure S3 access with IAM roles for the pod.
-Schedule daily backups (e.g., 0 2 * * * for 2 AM UTC).
-Additional Best Practices (Kubernetes Objects)
+React frontend for DevOps Learning Platform     
 
-NetworkPolicy:
-Object: NetworkPolicy
-Purpose: Restricts traffic to/from the Java app and MySQL pods.
-Best Practices:
-Allow Java app to MySQL (port 3306).
-Allow Ingress traffic to Java app (port 8080).
-Deny other traffic for security.
+#### Features for Flask Backend
+4. **Deployment for Flask Backend**:
+   - **Object**: `Deployment`
+   - **Purpose**: Manages stateless Flask API pods, serving endpoints like `/api/topics` and `/api/quiz`.
+   - **Best Practices**:
+     - Set `replicas: 2` for redundancy.
+     - Use `livenessProbe` and `readinessProbe` (HTTP GET on `/health` or `/api/topics`, port 8000).
+     - Define resource `requests` and `limits` (e.g., CPU: 200m/1000m, Memory: 256Mi/1024Mi).
+     - Use image: `livingdevopswithakhilesh/devopsdozo:backend-latest`.
+     - Inject RDS credentials via `Secret` (from AWS Parameter Store).
 
-HorizontalPodAutoscaler (HPA):
-Object: HorizontalPodAutoscaler
-Purpose: Scales Java app pods based on CPU/memory usage.
-Best Practices:
-Set minReplicas: 2, maxReplicas: 5.
-Target CPU utilization (e.g., 70%).
+5. **Service for Flask Backend**:
+   - **Object**: `Service`
+   - **Purpose**: Exposes the backend internally on port 8000 for the frontend and direct API access (if needed).
+   - **Best Practices**:
+     - Use `ClusterIP` type.
+     - Map service port 8000 to container port 8000 (Flask).
+     - Use selector `app: devops-learning-backend`.
 
-PodDisruptionBudget (PDB):
-Object: PodDisruptionBudget
-Purpose: Ensures a minimum number of Java app or MySQL pods are available during voluntary disruptions (e.g., node upgrades).
-Best Practices:
-Set minAvailable: 1 for MySQL.
-Set minAvailable: 2 for Java app.
+6. **Ingress for Flask Backend** (Optional):
+   - **Object**: `Ingress`
+   - **Purpose**: Routes external traffic (e.g., `api.your-domain.com`) to the backend service for direct API access (e.g., for testing or admin tools).
+   - **Best Practices**:
+     - Use ALB annotations.
+     - Set health check path to `/health` or `/api/topics`.
+     - Set `host: api.your-domain.com` and integrate with Route 53.
+     - Consider skipping this if the frontend handles all API traffic internally.
 
-ServiceAccount and RBAC:
-Objects: ServiceAccount, Role, RoleBinding
-Purpose: Grants permissions for pods to access AWS Parameter Store or S3 (via IAM roles for service accounts, IRSA).
-Best Practices:
-Create a ServiceAccount for the Java app and MySQL.
-Associate an IAM role with permissions for SSM and S3.
+7. **Job for Database Migrations**:
+   - **Object**: `Job`
+   - **Purpose**: Runs `flask db migrate` and `flask db upgrade` to initialize the RDS PostgreSQL schema before the backend starts.
+   - **Best Practices**:
+     - Use the same backend image (`livingdevopswithakhilesh/devopsdozo:backend-latest`).
+     - Set `restartPolicy: OnFailure` to retry failed migrations.
+     - Inject RDS credentials via `Secret`.
+     - Run as a one-time job before the backend `Deployment` (use `initContainer` or manual execution if preferred).
+
+8. **ConfigMap for Backend Configuration**:
+   - **Object**: `ConfigMap`
+   - **Purpose**: Stores Flask configuration (e.g., `FLASK_DEBUG`, `SECRET_KEY`) and avoids hardcoding in the image.
+   - **Best Practices**:
+     - Mount as environment variables or a config file.
+     - Example:
+       ```yaml
+       data:
+         FLASK_DEBUG: "0"
+         SECRET_KEY: "your-secret-key"
+       ```
+
+9. **Secret for RDS Credentials**:
+   - **Object**: `Secret`
+   - **Purpose**: Stores PostgreSQL credentials (username, password, database name) from AWS Parameter Store.
+   - **Best Practices**:
+     - Sync credentials from Parameter Store (e.g., `/devops-learning/db-username`, `/devops-learning/db-password`).
+     - Inject as environment variables (e.g., `DATABASE_URL=postgresql://user:pass@host:5432/db`).
+     - Use OIDC and IAM roles (IRSA) for secure access to Parameter Store.
+
+#### Features for RDS PostgreSQL
+10. **External Service for RDS PostgreSQL**:
+    - **Object**: `Service` (without selectors, using `ExternalName` or endpoints)
+    - **Purpose**: Enables the Flask backend to connect to the RDS instance using Kubernetes DNS (e.g., `devops-learning-postgres.prod.svc.cluster.local:5432`).
+    - **Best Practices**:
+      - Use an `ExternalName` service pointing to the RDS endpoint (e.g., `my-rds-instance.abcdef123456.us-east-1.rds.amazonaws.com`).
+      - Alternatively, use a `Service` with manual endpoints if the RDS DNS name changes.
+      - Set port 5432 (PostgreSQL default).
+
+#### Shared Features
+11. **NetworkPolicy**:
+    - **Object**: `NetworkPolicy`
+    - **Purpose**: Restricts traffic for security.
+    - **Best Practices**:
+      - Allow frontend to backend (port 8000).
+      - Allow backend to RDS PostgreSQL (port 5432 via `External Service`).
+      - Allow ALB Ingress to frontend and backend.
+      - Deny other traffic.
+
+12. **HorizontalPodAutoscaler (HPA)**:
+    - **Object**: `HorizontalPodAutoscaler`
+    - **Purpose**: Scales frontend and backend pods based on CPU/memory usage.
+    - **Best Practices**:
+      - Set `minReplicas: 2`, `maxReplicas: 5`.
+      - Target CPU utilization (e.g., 70%).
+
+13. **PodDisruptionBudget (PDB)**:
+    - **Object**: `PodDisruptionBudget`
+    - **Purpose**: Ensures minimum availability during voluntary disruptions (e.g., node upgrades).
+    - **Best Practices**:
+      - Set `minAvailable: 1` for both frontend and backend.
+
+14. **ServiceAccount and RBAC**:
+    - **Object**: `ServiceAccount`, `Role`, `RoleBinding`
+    - **Purpose**: Grants pods access to AWS Parameter Store and S3 (for backups, if needed) via IAM roles (IRSA).
+    - **Best Practices**:
+      - Create a `ServiceAccount` for the backend.
+      - Associate an IAM role with permissions for SSM Parameter Store.
+      - Use OIDC for secure authentication.
+
+15. **CI/CD Integration**:
+    - **Purpose**: Automates deployment and updates.
+    - **Best Practices**:
+      - **Jenkins**: Update the pipeline to handle frontend and backend images (if you rebuild them) and update manifests in `devops-learning-manifest/`.
+      - **ArgoCD**: Configure an `Application` to sync `devops-learning-manifest/` to the `prod` namespace.
+      - Store manifests in `my-first-cluster-manifests` for GitOps.
+
+16. **Monitoring**:
+    - **Purpose**: Tracks app performance and health.
+    - **Best Practices**:
+      - Use Prometheus to scrape metrics:
+        - Frontend: Nginx metrics (e.g., request latency).
+        - Backend: Flask metrics (e.g., `/metrics` if exposed) or pod metrics.
+        - RDS: CloudWatch metrics via Prometheus exporter.
+      - Create Grafana dashboards for CPU, memory, request rates, and DB connections.
+      - Set alerts for pod crashes or high error rates.
+
+17. **Route 53 Integration**:
+    - **Purpose**: Maps domains to the ALB.
+    - **Best Practices**:
+      - Create DNS records in Route 53:
+        - `frontend.your-domain.com` -> ALB hostname (frontend).
+        - `api.your-domain.com` -> ALB hostname (backend, if exposed).
+      - Use AWS ACM for HTTPS certificates.
 
 ---
 
-# Features Summary
-Here’s a consolidated list of features and Kubernetes objects for the Java app and MySQL deployment:
+### Additional Guidance for Writing Manifests
 
-Java App:
-Deployment: Stateless app with replicas, health checks, resource limits.
-Service: Internal load balancing (port 8080).
-Ingress: External access via ALB.
-Secret: AWS Parameter Store for sensitive data (e.g., DB credentials).
-HorizontalPodAutoscaler: Auto-scaling based on load.
-NetworkPolicy: Restrict traffic to MySQL and Ingress.
+When writing your manifests in `~/my-first-cluster-manifests/devops-learning-manifest/`, keep these best practices in mind:
+- **Namespace**: Set `metadata.namespace: prod` for all resources.
+- **Naming**:
+  - Use `metadata.name: devops-learning-frontend`, `devops-learning-backend`, etc.
+  - Add suffixes (e.g., `-service`, `-ingress`) for clarity.
+- **Labels**:
+  - Use `labels: { app: devops-learning-frontend }` for frontend, `app: devops-learning-backend` for backend.
+  - Ensure selectors match (e.g., `selector.matchLabels` in `Deployment` and `Service`).
+- **Probes**:
+  - Frontend: HTTP GET on `/` (port 80).
+  - Backend: HTTP GET on `/health` or `/api/topics` (port 8000).
+- **Resources**: Define `requests` and `limits` to prevent resource contention.
+- **Secrets**:
+  - Sync RDS credentials from Parameter Store (e.g., `/devops-learning/db-username`).
+  - Use `Secret` for `DATABASE_URL` and `SECRET_KEY`.
+- **Comments**: Add comments in manifests (e.g., `# React frontend for DevOps Learning Platform`).
+- **Validation**: Test manifests locally:
+  ```bash
+  kubectl apply -f ~/my-first-cluster-manifests/devops-learning-manifest/ --dry-run=client
+  ```
 
-MySQL:
-StatefulSet: Stable storage and network identity for the database.
-Service: Internal access for Java app (port 3306).
-PersistentVolumeClaim: EBS-backed storage for data.
-ConfigMap: MySQL configuration.
-Secret: Database credentials from Parameter Store.
-CronJob: Scheduled backups to S3.
-NetworkPolicy: Restrict traffic to Java app.
-Shared:
-ServiceAccount and RBAC: IAM roles for AWS SSM and S3 access.
-PodDisruptionBudget: Ensure availability during disruptions.
-CI/CD Integration:
-Jenkins pipeline to build/push Java app Docker image and update manifests.
-ArgoCD to sync java-app/ manifests to the java-app namespace.
-Grafana/Prometheus to monitor Java app and MySQL metrics (e.g., CPU, memory, DB connections).
+---
+
+### AWS Setup Notes
+
+To support the RDS PostgreSQL and Parameter Store, set up these AWS resources:
+
+1. **RDS PostgreSQL Instance**:
+   - Deploy in the same VPC as your EKS cluster, using **private subnets** (from your Terraform setup).
+   - Example AWS CLI command:
+     ```bash
+     aws rds create-db-instance \
+       --db-instance-identifier devops-learning-postgres \
+       --db-instance-class db.t3.micro \
+       --engine postgres \
+       --allocated-storage 20 \
+       --master-username postgres \
+       --master-user-password <password> \
+       --vpc-security-group-ids <your-eks-sg> \
+       --db-subnet-group-name <your-private-subnet-group> \
+       --no-publicly-accessible
+     ```
+   - Note the RDS endpoint (e.g., `devops-learning-postgres.abcdef123456.us-east-1.rds.amazonaws.com:5432`).
+
+2. **Parameter Store for Credentials**:
+   - Store RDS credentials:
+     ```bash
+     aws ssm put-parameter --name /devops-learning/db-username --value postgres --type SecureString
+     aws ssm put-parameter --name /devops-learning/db-password --value <password> --type SecureString
+     aws ssm put-parameter --name /devops-learning/db-name --value devops_learning --type SecureString
+     ```
+
+3. **IAM Role for Parameter Store**:
+   - Update the `ServiceAccount`’s IAM role (IRSA) to include SSM permissions:
+     ```json
+     {
+       "Effect": "Allow",
+       "Action": [
+         "ssm:GetParameter",
+         "ssm:GetParameters"
+       ],
+       "Resource": "arn:aws:ssm:us-east-1:<account-id>:parameter/devops-learning/*"
+     }
+     ```
+
+4. **Route 53**:
+   - Create DNS records after deploying the ALB:
+     ```bash
+     aws route53 change-resource-record-sets \
+       --hosted-zone-id <your-zone-id> \
+       --change-batch '{"Changes":[{"Action":"CREATE","ResourceRecordSet":{"Name":"frontend.your-domain.com","Type":"A","AliasTarget":{"HostedZoneId":"<ALB-ZONE-ID>","DNSName":"<ALB-HOSTNAME>","EvaluateTargetHealth":true}}}]}'
+     ```
+
+---
+
+### Next Steps
+
+1. **Set Up the Repository**:
+   - Ensure `~/my-first-cluster-manifests/` has `youtube-clone-manifest/` and `devops-learning-manifest/`.
+   - Push to GitHub:
+     ```bash
+     cd ~/my-first-cluster-manifests
+     git add devops-learning-manifest/
+     git commit -m "Add devops-learning-manifest directory"
+     git push origin main
+     ```
+
+2. **Create AWS Resources**:
+   - Deploy the RDS PostgreSQL instance in private subnets.
+   - Store credentials in Parameter Store.
+   - Update the IAM role for SSM access.
+
+3. **Write Manifests**:
+   - Create files in `~/my-first-cluster-manifests/devops-learning-manifest/`:
+     ```bash
+     touch ~/my-first-cluster-manifests/devops-learning-manifest/frontend-deployment.yaml
+     touch ~/my-first-cluster-manifests/devops-learning-manifest/backend-deployment.yaml
+     # Add more as needed
+     ```
+   - Use the YouTube Clone manifests as a reference, adapting for frontend (port 80) and backend (port 8000).
+
+4. **Share Manifests for Review**:
+   - When ready, paste the manifests or share a GitHub link.
+   - I’ll cross-check for correctness, best practices, and integration with EKS/ALB/CI/CD.
+
+5. **Continue CI/CD**:
+   - Extend the Jenkins pipeline to update `devops-learning-manifest/` (if you rebuild images).
+   - Configure ArgoCD to sync `devops-learning-manifest/`.
+
+---
+
+### Clarifications and Notes
+
+- **Single Repo**: `my-first-cluster-manifests` with `youtube-clone-manifest/` and `devops-learning-manifest/` is ideal for your setup.
+- **Prod Namespace**: Using `prod` aligns with your RBAC and CI/CD requirements.
+- **Naming**: Your convention (e.g., `devops-learning-frontend`, `devops-learning-backend-service`) is perfect.
+- **RDS**: The `External Service` simplifies connectivity without running PostgreSQL in the cluster.
+- **Learning Focus**: Writing manifests manually will deepen your Kubernetes skills.
+
+I’ll wait for you to write and share the manifests for the 3-tier app. Let me know if you have questions about specific objects (e.g., `Job`, `ExternalName Service`) or AWS setup. You’re doing fantastic, and I’m excited to review your work! 🚀
