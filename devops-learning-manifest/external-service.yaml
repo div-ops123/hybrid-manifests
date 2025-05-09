@@ -1,0 +1,10 @@
+# External Service to map RDS PostgreSQL endpoint to a Kubernetes DNS name. Enabling the Flask backend pods to query the database over the VPC’s private network.
+apiVersion: v1
+kind: Service
+metadata:
+  name: devops-learning-postgres  # Kubernetes DNS name for RDS
+  namespace: prod
+
+spec:
+  type: ExternalName
+  externalName: my-first-cluster-rds.c92ss0isgz05.af-south-1.rds.amazonaws.com:5432  # RDS endpoint from AWS

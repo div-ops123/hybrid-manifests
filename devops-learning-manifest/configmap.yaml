@@ -1,0 +1,10 @@
+# (Optional) Stores non-sensitive config like FLASK_DEBUG
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devops-learning-config
+  namespace: prod
+
+data:
+  FLASK_DEBUG: "0"  # Production mode. Disable debug mode
+  FLASK_APP: "run.py"

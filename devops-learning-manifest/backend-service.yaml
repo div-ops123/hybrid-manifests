@@ -1,0 +1,15 @@
+# Service for the Flask backend, exposing it internally for ALB Ingress
+apiVersion: v1
+kind: Service
+metadata:
+  name: devops-learning-backend-service
+  namespace: prod   # Prod namespace for CI/CD
+
+spec:
+  selector:
+    app: devops-learning-backend
+  ports:
+  - name: http        # Named port for clarity and prometeous
+    port: 8000        # Service port for ALB ingress
+    targetPort: 8000  # Flask Container port
+  type: ClusterIP     # Internal load balancing

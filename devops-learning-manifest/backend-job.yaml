@@ -1,0 +1,70 @@
+# Job to run database migrations for the Flask backend (RDS PostgreSQL)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: devops-learning-backend-migration
+  namespace: prod
+
+spec:
+  ttlSecondsAfterFinished: 100    # Delete completed pods after 100 seconds
+  backoffLimit: 3   # Retry failed attempts 3 times
+  activeDeadlineSeconds: 300    # Timeout after 5 minutes
+
+  template:
+    spec:
+      restartPolicy: OnFailure   # Retry failed containers
+      serviceAccountName: secrets-provider-aws-sa   # Same name giving to service account in kube-system namespace in terraform
+      containers:
+      - name: devops-learning-migration
+        image: livingdevopswithakhilesh/devopsdozo:backend-latest  # Same image as backend
+        imagePullPolicy: IfNotPresent # Pull only if not cached
+        command: ["/bin/bash", "-c", "flask db migrate -m 'Initial migration' && flask db upgrade"]  # Run migrations
+        
+        env:
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: devops-learning-secrets
+              key: DB_USERNAME
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: devops-learning-secrets
+              key: DB_PASSWORD
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: devops-learning-secrets
+              key: DB_NAME
+        - name: RDS_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: devops-learning-secrets
+              key: RDS_ENDPOINT
+        - name: DATABASE_URL
+          value: "postgresql://$(DB_USERNAME):$(DB_PASSWORD)@$(RDS_ENDPOINT)/$(DB_NAME)"
+        - # For session management and security
+          name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: devops-learning-secrets
+              key: SECRET_KEY
+        - # To control debug mode (e.g., 0 for production)
+          name: FLASK_DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: devops-learning-config
+              key: FLASK_DEBUG
+        - name: FLASK_APP
+          valueFrom:
+            configMapKeyRef:
+              name: devops-learning-config  # Required for Flask CLI
+              key: FLASK_APP
+
+        resources:  # Low resources because minimal traffic
+          requests:
+            cpu: "50m"      # Minimum 0.05 CPU
+            memory: "64Mi"  # Minimum 64MiB memory
+          limits:
+            cpu: "500m"     # Max 0.5 CPU to handle spikes
+            memory: "256Mi"  # Max 256MiB memory

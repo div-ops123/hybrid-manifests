@@ -1,0 +1,87 @@
+# Deployment for the Flask backend of the DevOps Learning Platform
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devops-learning-backend
+  namespace: prod     # Prod namespace for CI/CD compatibility
+spec:
+  replicas: 2   # Run 2 pods for high availability
+  selector:
+    matchLabels:
+      app: devops-learning-backend    # Matches pod template labels
+
+  template:
+    metadata:
+      labels:
+        app: devops-learning-backend
+    spec:
+      # initContainers: Not needed here. `backend-job.yaml` ensures db is initiated before Deployment pods start serving traffic
+      serviceAccountName: secrets-provider-aws-sa   # Same name giving to service account in kube-system namespace in terraform
+      containers:
+      - name: devops-learning-backend   # Container name for clarity
+        image: livingdevopswithakhilesh/devopsdozo:backend-latest   # Official backend image
+        ports:
+        - containerPort: 8000   # Flask serves on port 8000
+        
+        env:
+        # To connect to RDS PostgreSQL for queries (e.g., GET /api/topics), ongoing API calls to db
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: devops-learning-secrets
+              key: DB_USERNAME
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: devops-learning-secrets
+              key: DB_PASSWORD
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: devops-learning-secrets
+              key: DB_NAME
+        - name: RDS_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: devops-learning-secrets
+              key: RDS_ENDPOINT
+        - name: DATABASE_URL
+          value: "postgresql://$(DB_USERNAME):$(DB_PASSWORD)@$(RDS_ENDPOINT)/$(DB_NAME)"
+        - # For session management and security
+          name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: devops-learning-secrets
+              key: SECRET_KEY
+        - # To control debug mode (e.g., 0 for production)
+          name: FLASK_DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: devops-learning-config
+              key: FLASK_DEBUG
+        
+        resources:    # Low resources for minimal traffic
+          requests:
+            cpu: "50m"      # Minimum 0.05 CPU
+            memory: "64Mi"  # Minimum 64MiB memory
+          limits:
+            cpu: "500m"     # Max 0.5 CPU to handle spikes
+            memory: "256Mi" # Max 256MiB memory
+
+        livenessProbe:  # Checks if the container is running
+          httpGet:
+            path: /api  # Valid Flask endpoint for health check
+            port: 8000  # Flask container port
+          initialDelaySeconds: 15  # Wait 15s before first check
+          periodSeconds: 10        # Check every 10s
+          timeoutSeconds: 3        # Timeout after 3s
+          failureThreshold: 3      # Restart after 3 failures
+
+        readinessProbe:           # Checks if the container is ready for traffic
+          httpGet:
+            path: /api            # Same endpoint as liveness probe
+            port: 8000            # Flask contianer port
+          initialDelaySeconds: 5  # Start checking after 5s
+          periodSeconds: 5        # Check every 5s
+          timeoutSeconds: 3       # Timeout after 3s
+          failureThreshold: 3     # Remove from service after 3 failures

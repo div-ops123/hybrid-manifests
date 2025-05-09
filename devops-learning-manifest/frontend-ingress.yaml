@@ -5,7 +5,6 @@ metadata:
   name: devops-learning-frontend-ingress  # Unique name for the Ingress
   namespace: prod  # Prod namespace for CI/CD compatibility
   annotations:
-    kubernetes.io/ingress.class: alb  # Use AWS Load Balancer Controller
     alb.ingress.kubernetes.io/group.name: my-first-cluster.alb-group  # Share ALB with YouTube Clone
     alb.ingress.kubernetes.io/scheme: internet-facing  # Public ALB
     alb.ingress.kubernetes.io/target-type: ip  # Route directly to pod IPs
@@ -17,9 +16,11 @@ metadata:
     alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'  # 2 failed checks to be unhealthy
     alb.ingress.kubernetes.io/tags: Environment=prod,Project=devops-learning-app  # AWS resource tags
 spec:
+  ingressClassName: alb  # Must match the IngressClass created by aws-load-balancer-controller Helm release
   rules:
-  - host: frontend.your-domain.com  # Route 53 domain for the DevOps Learning app
-    http:
+  # - host: frontend.devops-learning-platform.com  # Route 53 domain for the DevOps Learning app
+  # Without the host field, the ALB routes all incoming traffic to the devops-learning-frontend-service, so no domain is required.
+  - http:
       paths:
       - path: /api
         pathType: Prefix

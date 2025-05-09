@@ -18,12 +18,12 @@ spec:
     spec:
       containers:
       - name: devops-learning-frontend  # Container name for clarity
-        image: livingdevopswithakhilesh/devopsdozo:frontend-latest  # Official frontend image
+        image: devopsdee/devops-learning-app:latest
         ports:
         - containerPort: 80  # Nginx serves on port 80
         env:
         - name: REACT_APP_API_URL
-          value: "/api"  # API calls proxied to backend via Ingress
+          value: "/api"  # API calls proxied to backend service via Ingress
 
         resources:
           requests:
